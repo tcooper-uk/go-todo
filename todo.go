@@ -18,10 +18,10 @@ type todo struct {
 }
 
 var counter int
-var items []todo
+var items []*todo
 
-func NewTodo(counter int, name string, createdAt time.Time) todo {
-	return todo{counter, name, createdAt}
+func NewTodo(counter int, name string, createdAt time.Time) *todo {
+	return &todo{counter, name, createdAt}
 }
 
 func saveItems(file *os.File) {
@@ -36,7 +36,7 @@ func saveItems(file *os.File) {
 	_, err = file.Write(json)
 
 	if err != nil {
-		log.Println("There was an error saving the todo list.")
+		log.Println("There was an error saving the todo list.", err)
 	}
 }
 
@@ -72,7 +72,7 @@ func getFile() *os.File {
 	f, err := os.OpenFile(exPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0755)
 
 	if err != nil {
-		log.Println(err)
+		log.Printf("Unable to open file %s\n", exPath)
 	}
 
 	return f
@@ -83,7 +83,7 @@ func printItems() {
 		fmt.Printf("[%d]\t%s\t%s\n",
 			item.ID,
 			item.Name,
-			item.CreatedAt.Format("Mon Jan _2 15:04:05"),
+			item.CreatedAt.Format("Mon 02 Jan 06 15:04"),
 		)
 	}
 }
@@ -125,7 +125,7 @@ func addItem(args ...string) {
 }
 
 func clearAll(file *os.File) {
-	items = make([]todo, 0)
+	items = make([]*todo, 0)
 	saveItems(file)
 }
 
