@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -59,7 +60,16 @@ func readTodoItems(f *os.File) int {
 }
 
 func getFile() *os.File {
-	f, err := os.OpenFile("todo.json", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0755)
+
+	exPath := "todo.json"
+	ex, err := os.Executable()
+
+	// use json file stored with binary
+	if err == nil {
+		exPath = filepath.Dir(ex) + "/todo.json"
+	}
+
+	f, err := os.OpenFile(exPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0755)
 
 	if err != nil {
 		log.Println(err)
