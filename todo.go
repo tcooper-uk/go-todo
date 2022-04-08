@@ -113,9 +113,20 @@ func parseIds(possibleIds ...string) []int {
 
 func addItem(args ...string) {
 	name := strings.Join(args, " ")
+	name = strings.TrimSpace(name)
+
+	if len(name) == 0 {
+		return
+	}
+
 	counter++
 	t := NewTodo(counter, name, time.Now())
 	items = append(items, t)
+}
+
+func clearAll(file *os.File) {
+	items = make([]todo, 0)
+	saveItems(file)
 }
 
 func main() {
@@ -123,24 +134,27 @@ func main() {
 	// args without program name
 	args := os.Args[1:]
 
-	if len(args) == 0 {
-		fmt.Println("Not sure what you want.")
-		return
-	}
-
 	file := getFile()
 	defer file.Close()
 
 	counter = readTodoItems(file)
 
+	if len(args) == 0 {
+		printItems()
+		return
+	}
+
 	switch args[0] {
 	case "list", "l", "ps", "ls":
 		printItems()
+		return
 	case "delete", "remove", "d":
 		ids := parseIds(args[1:]...)
 		deleteItem(ids...)
 	case "add", "create", "put", "a":
 		addItem(args[1:]...)
+	case "clearall":
+		clearAll(file)
 	default:
 		fmt.Printf("Unknown command %s\n", args[0])
 	}
