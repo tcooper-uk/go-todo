@@ -1,3 +1,5 @@
 cmd/todo
 cmd/main
 cmd/todo.json
+
+bin/
