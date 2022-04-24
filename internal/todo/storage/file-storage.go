@@ -33,7 +33,7 @@ func NewLocalFileStore(filePath string) *LocalFileStore {
 	}
 }
 
-func (store LocalFileStore) GetAllItems() []t.Todo {
+func (store *LocalFileStore) GetAllItems() []t.Todo {
 	var results []t.Todo
 
 	for _, v := range items {
@@ -43,18 +43,18 @@ func (store LocalFileStore) GetAllItems() []t.Todo {
 	return results
 }
 
-func (store LocalFileStore) GetItem(id int) t.Todo {
+func (store *LocalFileStore) GetItem(id int) t.Todo {
 	return items[id]
 }
 
-func (store LocalFileStore) AddItem(value string) int {
+func (store *LocalFileStore) AddItem(value string) int {
 	defer saveItems(store.FilePath)
 	maxId++
 	items[maxId] = *t.NewTodo(maxId, value, time.Now())
 	return 1
 }
 
-func (store LocalFileStore) DeleteItem(ids ...int) int {
+func (store *LocalFileStore) DeleteItem(ids ...int) int {
 	defer saveItems(store.FilePath)
 
 	var count int
@@ -70,7 +70,7 @@ func (store LocalFileStore) DeleteItem(ids ...int) int {
 	return count
 }
 
-func (store LocalFileStore) DeleteAllItems() int {
+func (store *LocalFileStore) DeleteAllItems() int {
 	defer saveItems(store.FilePath)
 
 	s := size
