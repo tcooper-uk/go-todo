@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,12 @@ var store s.TodoStore
 
 func printItems() {
 	items := store.GetAllItems()
+
+	// sort by id
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ID < items[j].ID
+	})
+
 	for _, item := range items {
 		fmt.Printf("[%d]\t%s\t%s\n",
 			item.ID,
