@@ -4,22 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 
-	s "github.com/tcooper-uk/go-todo/internal/todo/storage"
+	s "github.com/tcooper-uk/go-todo/internal/storage"
 )
 
 var store s.TodoStore
 
 func printItems() {
 	items := store.GetAllItems()
-
-	// sort by id
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].ID < items[j].ID
-	})
 
 	for _, item := range items {
 		fmt.Printf("[%d]\t%s\t%s\n",
@@ -80,6 +74,20 @@ func main() {
 	case "add", "create", "put", "a":
 		value := strings.Join(args[1:], " ")
 		store.AddItem(value)
+	case "e", "edit":
+
+		if len(args) <= 1 {
+			fmt.Println("You must supply and ID and new value.")
+		}
+
+		id := parseIds(args[1])
+		value := strings.Join(args[2:], " ")
+		count := store.EditItem(id[0], value)
+
+		if count == 0 {
+			fmt.Printf("Cannot find item with ID %d\n", id[0])
+		}
+
 	case "clearall":
 		store.DeleteAllItems()
 	default:

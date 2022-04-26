@@ -1,16 +1,16 @@
 package storage
 
-import "github.com/tcooper-uk/go-todo/internal/todo"
+import "github.com/tcooper-uk/go-todo/internal"
 
 // Represents store of todo items
 type TodoStore interface {
 	// List all the items.
 	// Returns a slice of todo items.
-	GetAllItems() []todo.Todo
+	GetAllItems() []internal.Todo
 
 	// Get a single todo item by it's unique id.
 	// Returns a single todo item.
-	GetItem(id int) todo.Todo
+	GetItem(id int) internal.Todo
 
 	// Add a single item.
 	// Returns a count of the amount of items added
@@ -25,4 +25,9 @@ type TodoStore interface {
 	// Delete all items from the store.
 	// Returns a count of the amount of items deleted.
 	DeleteAllItems() int
+
+	// Edit a single item.
+	// Updated the item with the given id to the given value.
+	// Returns the count of items updated
+	EditItem(id int, value string) int
 }

@@ -1,4 +1,4 @@
-package todo
+package internal
 
 import "time"
 

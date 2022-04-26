@@ -1,8 +1,10 @@
+build: test compile
+
 run:
 	go run cmd/main.go
 
-build: 
-	go build -o cmd/todo cmd/main.go
+test:
+	go test ./...
 
 compile:
 	echo "Compiling for multiple platforms"
