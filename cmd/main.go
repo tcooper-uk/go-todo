@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	s "github.com/tcooper-uk/go-todo/internal/storage"
 )
@@ -15,12 +16,50 @@ var store s.TodoStore
 func printItems() {
 	items := store.GetAllItems()
 
+	const maxChars = 100
+	var maxLen int
+
 	for _, item := range items {
-		fmt.Printf("[%d]\t%s\t%s\n",
-			item.ID,
-			item.Name,
-			item.CreatedAt.Format("Mon 02 Jan 06 15:04"),
-		)
+		i := utf8.RuneCountInString(item.Name)
+
+		if i >= maxChars {
+			maxLen = maxChars + 3
+			break
+		}
+
+		if i > maxLen {
+			maxLen = i
+		}
+	}
+
+	for _, item := range items {
+
+		i := utf8.RuneCountInString(item.Name)
+
+		fmt.Printf("[%d]\t", item.ID)
+		var printCount int
+		for _, runeVal := range item.Name {
+			if printCount == maxChars {
+				fmt.Print("...")
+				break
+			}
+
+			fmt.Printf("%c", runeVal)
+			printCount++
+		}
+
+		remainder := maxLen - i
+		for i := 0; i < remainder; i++ {
+			fmt.Print(" ")
+		}
+
+		fmt.Printf("\t%s\n", item.CreatedAt.Format("Mon 02 Jan 06 15:04"))
+
+		// fmt.Printf("[%d]\t%s\t%s\n",
+		// 	item.ID,
+		// 	item.Name,
+		// 	item.CreatedAt.Format("Mon 02 Jan 06 15:04"),
+		// )
 	}
 }
 
