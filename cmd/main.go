@@ -12,9 +12,7 @@ import (
 	s "github.com/tcooper-uk/go-todo/internal/storage"
 )
 
-var store s.TodoStore
-
-func printItems() {
+func printItems(store s.TodoStore) {
 	items := store.GetAllItems()
 
 	const maxChars = 100
@@ -77,7 +75,8 @@ func parseIds(possibleIds ...string) []int {
 }
 
 func determineFilePath() string {
-	var filePath string
+
+	filePath := s.FILE_NAME
 
 	homeDir := os.Getenv("HOME")
 	if homeDir != "" {
@@ -97,10 +96,10 @@ func main() {
 	args := os.Args[1:]
 	argCount := len(args)
 
-	store = s.NewLocalFileStore(determineFilePath())
+	store := s.NewLocalFileStore(determineFilePath())
 
 	if argCount == 0 {
-		printItems()
+		printItems(store)
 		return
 	}
 
@@ -118,15 +117,15 @@ func main() {
 
 	switch args[0] {
 	case "list", "l", "ps", "ls":
-		printItems()
+		printItems(store)
 		return
-	case "delete", "remove", "d":
+	case "delete", "remove", "d", "rm":
 		ids := parseIds(args[1:]...)
 		store.DeleteItem(ids...)
 	case "add", "create", "put", "a":
 		value := strings.Join(args[1:], " ")
 		store.AddItem(value)
-	case "e", "edit":
+	case "e", "edit", "update":
 
 		if len(args) <= 1 {
 			fmt.Println("You must supply and ID and new value.")
