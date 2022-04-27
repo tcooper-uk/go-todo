@@ -14,11 +14,11 @@ func TestCanGetAllItems(t *testing.T) {
 
 	items := s.GetAllItems()
 
-	assert.Equal(t, 2, len(items))
-	assert.Equal(t, items[0].ID, 1)
-	assert.Equal(t, items[0].Name, "first")
-	assert.Equal(t, items[1].ID, 2)
-	assert.Equal(t, items[1].Name, "second")
+	assert.Equal(t, 2, items.Size)
+	assert.Equal(t, items.Items[0].ID, 1)
+	assert.Equal(t, items.Items[0].Name, "first")
+	assert.Equal(t, items.Items[1].ID, 2)
+	assert.Equal(t, items.Items[1].Name, "second")
 }
 
 func TestCanGetSingleItem(t *testing.T) {
@@ -44,8 +44,8 @@ func TestCanCreateNewItem(t *testing.T) {
 
 	assert.Empty(t, initalItems)
 	assert.NotEmpty(t, items)
-	assert.Equal(t, items[0].ID, 1)
-	assert.Equal(t, items[0].Name, "new item")
+	assert.Equal(t, items.Items[0].ID, 1)
+	assert.Equal(t, items.Items[0].Name, "new item")
 }
 
 func TestCanEditItem(t *testing.T) {
@@ -60,8 +60,8 @@ func TestCanEditItem(t *testing.T) {
 	items := s.GetAllItems()
 
 	assert.NotEmpty(t, items)
-	assert.Equal(t, items[0].ID, 1)
-	assert.Equal(t, items[0].Name, "value2")
+	assert.Equal(t, items.Items[0].ID, 1)
+	assert.Equal(t, items.Items[0].Name, "value2")
 }
 
 func TestCanDeleteItem(t *testing.T) {

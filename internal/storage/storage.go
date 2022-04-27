@@ -5,12 +5,12 @@ import "github.com/tcooper-uk/go-todo/internal"
 // Represents store of todo items
 type TodoStore interface {
 	// List all the items.
-	// Returns a slice of todo items.
-	GetAllItems() []internal.Todo
+	// Returns a a collection of todo items
+	GetAllItems() *internal.TodoCollection
 
 	// Get a single todo item by it's unique id.
 	// Returns a single todo item.
-	GetItem(id int) internal.Todo
+	GetItem(id int) *internal.Todo
 
 	// Add a single item.
 	// Returns a count of the amount of items added

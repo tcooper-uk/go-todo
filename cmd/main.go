@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/tcooper-uk/go-todo/internal"
 	s "github.com/tcooper-uk/go-todo/internal/storage"
 )
 
@@ -17,22 +18,22 @@ func printItems() {
 	items := store.GetAllItems()
 
 	const maxChars = 100
-	var maxLen int
 
-	for _, item := range items {
-		i := utf8.RuneCountInString(item.Name)
-
-		if i >= maxChars {
-			maxLen = maxChars + 3
-			break
-		}
-
-		if i > maxLen {
-			maxLen = i
-		}
+	// account for the ...
+	if items.MaxLengthItem >= maxChars {
+		items.MaxLengthItem = items.MaxLengthItem + 3
 	}
 
-	for _, item := range items {
+	// print headers
+	headerPadding := items.MaxLengthItem - 4
+	if headerPadding < 0 {
+		headerPadding = 0
+	}
+
+	fmt.Printf("ID\tItem%s\tCreated At\n", strings.Repeat(" ", headerPadding))
+
+	// print items
+	for _, item := range items.Items {
 
 		i := utf8.RuneCountInString(item.Name)
 
@@ -48,19 +49,18 @@ func printItems() {
 			printCount++
 		}
 
-		remainder := maxLen - i
-		for i := 0; i < remainder; i++ {
-			fmt.Print(" ")
-		}
+		remainder := items.MaxLengthItem - i
+		fmt.Print(strings.Repeat(" ", remainder))
 
 		fmt.Printf("\t%s\n", item.CreatedAt.Format("Mon 02 Jan 06 15:04"))
-
-		// fmt.Printf("[%d]\t%s\t%s\n",
-		// 	item.ID,
-		// 	item.Name,
-		// 	item.CreatedAt.Format("Mon 02 Jan 06 15:04"),
-		// )
 	}
+}
+
+func printItem(item *internal.Todo) {
+	fmt.Printf("ID:\t\t%d\n", item.ID)
+	fmt.Printf("Item:\t\t%s\n", item.Name)
+	fmt.Printf("Created At:\t%s\n", item.CreatedAt.Format("Mon 02 Jan 06 15:04"))
+	fmt.Printf("Updated At:\t%s\n", item.UpdatedAt.Format("Mon 02 Jan 06 15:04"))
 }
 
 func parseIds(possibleIds ...string) []int {
@@ -95,11 +95,24 @@ func main() {
 
 	// args without program name
 	args := os.Args[1:]
+	argCount := len(args)
 
 	store = s.NewLocalFileStore(determineFilePath())
 
-	if len(args) == 0 {
+	if argCount == 0 {
 		printItems()
+		return
+	}
+
+	// first argument is an ID
+	if id, err := strconv.ParseInt(args[0], 0, 0); argCount == 1 && err == nil {
+		item := store.GetItem(int(id))
+
+		if item == nil {
+			// cannot find item
+			fmt.Printf("Cannot find item with ID %d\n", id)
+		}
+		printItem(item)
 		return
 	}
 

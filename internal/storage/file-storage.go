@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	t "github.com/tcooper-uk/go-todo/internal"
 )
@@ -39,10 +40,20 @@ func NewLocalFileStore(filePath string) *LocalFileStore {
 	}
 }
 
-func (store *LocalFileStore) GetAllItems() []t.Todo {
+func (store *LocalFileStore) GetAllItems() *t.TodoCollection {
 	var results []t.Todo
-
+	var count int
+	var maxLength int
 	for _, v := range store.items {
+		count++
+
+		valueLength := utf8.RuneCountInString(v.Name)
+		if valueLength > maxLength {
+			maxLength = valueLength
+		}
+
+		setUpdatedAtIfRequired(&v)
+
 		results = append(results, v)
 	}
 
@@ -51,11 +62,18 @@ func (store *LocalFileStore) GetAllItems() []t.Todo {
 		return results[i].ID < results[j].ID
 	})
 
-	return results
+	return &t.TodoCollection{
+		Items:         results,
+		Size:          count,
+		MaxLengthItem: maxLength,
+	}
+
 }
 
-func (store *LocalFileStore) GetItem(id int) t.Todo {
-	return store.items[id]
+func (store *LocalFileStore) GetItem(id int) *t.Todo {
+	item := store.items[id]
+	setUpdatedAtIfRequired(&item)
+	return &item
 }
 
 func (store *LocalFileStore) AddItem(value string) int {
@@ -99,9 +117,16 @@ func (store *LocalFileStore) EditItem(id int, value string) int {
 	}
 
 	i.Name = value
+	i.UpdatedAt = time.Now()
 	store.items[id] = i
 
 	return 1
+}
+
+func setUpdatedAtIfRequired(item *t.Todo) {
+	if item.UpdatedAt.IsZero() {
+		item.UpdatedAt = item.CreatedAt
+	}
 }
 
 func saveItems(path string, items map[int]t.Todo) {
