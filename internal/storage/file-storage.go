@@ -147,10 +147,8 @@ func saveItems(path string, items map[int]t.Todo) {
 	}
 
 	// build json and write out
-	json, err := json.Marshal(tmp)
-	_, err = file.Write(json)
-
-	if err != nil {
+	j := json.NewEncoder(file)
+	if j.Encode(&tmp) != nil {
 		fmt.Println("There was an error saving the todo list.", err)
 	}
 }
@@ -169,11 +167,8 @@ func loadItemsFromFile(path string, items map[int]t.Todo) (int, int, error) {
 
 	var tmp []t.Todo
 
-	stat, _ := f.Stat()
-	buffer := make([]byte, stat.Size())
-	n, _ := f.Read(buffer)
-
-	if n == 0 || json.Unmarshal(buffer, &tmp) != nil {
+	decode := json.NewDecoder(f)
+	if decode.Decode(&tmp) != nil {
 		return 0, 0, loadErr
 	}
 
