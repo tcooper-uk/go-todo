@@ -127,11 +127,20 @@ func main() {
 		store.AddItem(value)
 	case "e", "edit", "update":
 
-		if len(args) <= 1 {
+		idErr := func() {
 			fmt.Println("You must supply and ID and new value.")
+			os.Exit(1)
+		}
+
+		if len(args) <= 1 {
+			idErr()
 		}
 
 		id := parseIds(args[1])
+		if len(id) == 0 {
+			idErr()
+		}
+
 		value := strings.Join(args[2:], " ")
 		count := store.EditItem(id[0], value)
 
@@ -143,5 +152,6 @@ func main() {
 		store.DeleteAllItems()
 	default:
 		fmt.Printf("Unknown command %s\n", args[0])
+		os.Exit(1)
 	}
 }
