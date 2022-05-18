@@ -5,16 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 	"unicode/utf8"
 
 	t "github.com/tcooper-uk/go-todo/internal"
 )
-
-const FILE_NAME = "todo.json"
 
 type LocalFileStore struct {
 	items map[int]t.Todo
@@ -192,30 +188,9 @@ func loadItemsFromFile(path string, items map[int]t.Todo) (int, int, error) {
 
 // get the storage file
 func getFile(path string) (*os.File, error) {
-
-	var filePath string
-
-	if path != "" {
-		filePath = path
-	} else {
-		ex, err := os.Executable()
-
-		// use json file stored with binary
-		if err == nil {
-			exePath := filepath.Dir(ex)
-			if !strings.HasSuffix(exePath, "/") {
-				exePath = exePath + "/"
-			}
-
-			filePath = exePath + FILE_NAME
-		}
-	}
-
-	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0755)
-
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0755)
 	if err != nil {
 		return nil, err
 	}
-
 	return f, nil
 }

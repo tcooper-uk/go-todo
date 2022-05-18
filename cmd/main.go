@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -9,8 +8,89 @@ import (
 	"unicode/utf8"
 
 	"github.com/tcooper-uk/go-todo/internal"
+	"github.com/tcooper-uk/go-todo/internal/storage"
 	s "github.com/tcooper-uk/go-todo/internal/storage"
+	"github.com/tcooper-uk/go-todo/internal/storage/db"
 )
+
+const useDb = true
+
+func main() {
+
+	// args without program name
+	args := os.Args[1:]
+	argCount := len(args)
+
+	filePath, err := storage.Setup(useDb)
+
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
+
+	var store s.TodoStore
+	if useDb {
+		store, err = db.NewSQLLiteStorage(filePath)
+	} else {
+		store = s.NewLocalFileStore(filePath)
+	}
+
+	if argCount == 0 {
+		printItems(store)
+		return
+	}
+
+	// first argument is an ID
+	if id, err := strconv.ParseInt(args[0], 0, 0); argCount == 1 && err == nil {
+		item := store.GetItem(int(id))
+
+		if item == nil {
+			// cannot find item
+			fmt.Printf("Cannot find item with ID %d\n", id)
+		}
+		printItem(item)
+		return
+	}
+
+	switch args[0] {
+	case "list", "l", "ps", "ls":
+		printItems(store)
+		return
+	case "delete", "remove", "d", "rm":
+		ids := parseIds(args[1:]...)
+		store.DeleteItem(ids...)
+	case "add", "create", "put", "a":
+		value := strings.Join(args[1:], " ")
+		store.AddItem(value)
+	case "e", "edit", "update":
+
+		idErr := func() {
+			fmt.Println("You must supply and ID and new value.")
+			os.Exit(1)
+		}
+
+		if len(args) <= 1 {
+			idErr()
+		}
+
+		id := parseIds(args[1])
+		if len(id) == 0 {
+			idErr()
+		}
+
+		value := strings.Join(args[2:], " ")
+		count := store.EditItem(id[0], value)
+
+		if count == 0 {
+			fmt.Printf("Cannot find item with ID %d\n", id[0])
+		}
+
+	case "clearall":
+		store.DeleteAllItems()
+	default:
+		fmt.Printf("Unknown command %s\n", args[0])
+		os.Exit(1)
+	}
+}
 
 func printItems(store s.TodoStore) {
 	items := store.GetAllItems()
@@ -72,86 +152,4 @@ func parseIds(possibleIds ...string) []int {
 	}
 
 	return ids
-}
-
-func determineFilePath() string {
-
-	filePath := s.FILE_NAME
-
-	homeDir := os.Getenv("HOME")
-	if homeDir != "" {
-		checkPath := homeDir + "/" + s.FILE_NAME
-		if _, err := os.Stat(checkPath); errors.Is(err, os.ErrNotExist) {
-			return filePath
-		} else {
-			return checkPath
-		}
-	}
-	return filePath
-}
-
-func main() {
-
-	// args without program name
-	args := os.Args[1:]
-	argCount := len(args)
-
-	store := s.NewLocalFileStore(determineFilePath())
-
-	if argCount == 0 {
-		printItems(store)
-		return
-	}
-
-	// first argument is an ID
-	if id, err := strconv.ParseInt(args[0], 0, 0); argCount == 1 && err == nil {
-		item := store.GetItem(int(id))
-
-		if item == nil {
-			// cannot find item
-			fmt.Printf("Cannot find item with ID %d\n", id)
-		}
-		printItem(item)
-		return
-	}
-
-	switch args[0] {
-	case "list", "l", "ps", "ls":
-		printItems(store)
-		return
-	case "delete", "remove", "d", "rm":
-		ids := parseIds(args[1:]...)
-		store.DeleteItem(ids...)
-	case "add", "create", "put", "a":
-		value := strings.Join(args[1:], " ")
-		store.AddItem(value)
-	case "e", "edit", "update":
-
-		idErr := func() {
-			fmt.Println("You must supply and ID and new value.")
-			os.Exit(1)
-		}
-
-		if len(args) <= 1 {
-			idErr()
-		}
-
-		id := parseIds(args[1])
-		if len(id) == 0 {
-			idErr()
-		}
-
-		value := strings.Join(args[2:], " ")
-		count := store.EditItem(id[0], value)
-
-		if count == 0 {
-			fmt.Printf("Cannot find item with ID %d\n", id[0])
-		}
-
-	case "clearall":
-		store.DeleteAllItems()
-	default:
-		fmt.Printf("Unknown command %s\n", args[0])
-		os.Exit(1)
-	}
 }
