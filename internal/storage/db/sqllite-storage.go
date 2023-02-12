@@ -72,7 +72,7 @@ func (store *SQLLiteStore) GetAllItems() *internal.TodoCollection {
 	}
 }
 
-// Get a single todo item by it's unique id.
+// GetItem Get a single todo item by it's unique id.
 // Returns a single todo item.
 func (store *SQLLiteStore) GetItem(id int) *internal.Todo {
 	row := store.db.QueryRow("SELECT "+fields+" FROM todo_item WHERE id = ?", id)
@@ -86,7 +86,7 @@ func (store *SQLLiteStore) GetItem(id int) *internal.Todo {
 	return item
 }
 
-// Add a single item.
+// AddItem Add a single item.
 // Returns a count of the amount of items added
 // this will be 1 or -1 indicating an error.
 func (store *SQLLiteStore) AddItem(value string) int {
@@ -110,7 +110,7 @@ func (store *SQLLiteStore) AddItem(value string) int {
 	return 1
 }
 
-// Delete a single item by it's unique id.
+// DeleteItem Delete a single item by it's unique id.
 // Returns a count of the amount of items deleted
 // this will be 1 or -1 indicating an error.
 func (store *SQLLiteStore) DeleteItem(ids ...int) int {
@@ -143,7 +143,7 @@ func (store *SQLLiteStore) DeleteItem(ids ...int) int {
 	return successCount
 }
 
-// Delete all items from the store.
+// DeleteAllItems Delete all items from the store.
 // Returns a count of the amount of items deleted.
 func (store *SQLLiteStore) DeleteAllItems() int {
 	tx, _ := store.db.Begin()
@@ -165,7 +165,7 @@ func (store *SQLLiteStore) DeleteAllItems() int {
 	return int(i)
 }
 
-// Edit a single item.
+// EditItem Edit a single item.
 // Updated the item with the given id to the given value.
 // Returns the count of items updated
 func (store *SQLLiteStore) EditItem(id int, value string) int {

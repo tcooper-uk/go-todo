@@ -151,7 +151,7 @@ func saveItems(path string, items map[int]t.Todo) {
 
 func loadItemsFromFile(path string, items map[int]t.Todo) (int, int, error) {
 
-	loadErr := errors.New("Unable to load items from file.")
+	loadErr := errors.New("unable to load items from file")
 
 	f, err := getFile(path)
 	defer f.Close()

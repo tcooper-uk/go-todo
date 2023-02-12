@@ -86,10 +86,33 @@ func main() {
 
 	case "clearall":
 		store.DeleteAllItems()
+	case "help", "-h", "--help":
+		printHelp()
 	default:
 		fmt.Printf("Unknown command %s\n", args[0])
 		os.Exit(1)
 	}
+}
+
+func printHelp() {
+	fmt.Println("Todo Store")
+	fmt.Println("USAGE: todo [COMMAND] [ARGUMENT]")
+	fmt.Println()
+	fmt.Println("Commands")
+	fmt.Printf("\tlist, l, ps, ls \t- list your todo items\n")
+
+	fmt.Printf("\tdelete, remove, d, rm \t- delete a todo item but id.\n")
+	fmt.Printf("\t\t- this will take the id as an arugmnet\n")
+
+	fmt.Printf("\tadd, create, put, a \t- add a new item to the todo list.\n")
+	fmt.Printf("\t\t- This will take the full title of the todo item as the arguments following the command.\n")
+
+	fmt.Printf("\te, edit, update \t- edit an existing todo by the id.\n")
+	fmt.Printf("\t\t- this will take the id as an arugmnet\n")
+
+	fmt.Printf("\tclearall \t- delete all todo items.\n")
+
+	fmt.Printf("\thelp, -h, --help \t- show this help text.\n")
 }
 
 func printItems(store s.TodoStore) {

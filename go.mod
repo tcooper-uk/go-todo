@@ -1,6 +1,6 @@
 module github.com/tcooper-uk/go-todo
 
-go 1.18
+go 1.19
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.13
