@@ -34,7 +34,7 @@ func main() {
 		store = s.NewLocalFileStore(filePath)
 	case storage.CloudMode:
 		store, err = db.NewCloudStore(&db.CloudStoreConfig{
-			ProjectId: "todo-de411",
+			ProjectId: db.ProjectId,
 			KeyFile:   filePath,
 		})
 	}

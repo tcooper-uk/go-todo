@@ -9,7 +9,7 @@ func main() {
 	dbPath, _ := storage.Setup(storage.DbMode)
 	firestorePath, _ := storage.Setup(storage.CloudMode)
 	firestore, _ := db.NewCloudStore(&db.CloudStoreConfig{
-		ProjectId: "todo-de411",
+		ProjectId: db.ProjectId,
 		KeyFile:   firestorePath,
 	})
 

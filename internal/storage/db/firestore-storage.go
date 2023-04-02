@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
-const collection = "todos"
+const (
+	ProjectId  = "todo-de411"
+	collection = "todos"
+)
 
 type CloudStore struct {
 	client *firestore.Client
