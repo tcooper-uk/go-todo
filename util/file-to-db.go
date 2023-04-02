@@ -9,8 +9,8 @@ import (
 
 func main() {
 
-	dbPath, _ := storage.Setup(true)
-	jsonFile, _ := storage.Setup(false)
+	dbPath, _ := storage.Setup(storage.DbMode)
+	jsonFile, _ := storage.Setup(storage.FileMode)
 	localStore := storage.NewLocalFileStore(jsonFile)
 	collection := localStore.GetAllItems()
 

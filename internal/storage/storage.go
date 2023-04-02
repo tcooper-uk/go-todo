@@ -3,14 +3,22 @@ package storage
 import (
 	"errors"
 	"fmt"
-	"os"
-
 	"github.com/tcooper-uk/go-todo/internal"
+	"os"
+)
+
+type Mode uint8
+
+const (
+	FileMode  Mode = 0
+	DbMode    Mode = 1
+	CloudMode Mode = 2
 )
 
 const (
 	DB_FILE   = "todo.db"
 	JSON_FILE = "todo.json"
+	KEY_FILE  = "firestore_key.json"
 )
 
 // TodoStore Represents store of todo items
@@ -43,7 +51,7 @@ type TodoStore interface {
 	EditItem(id int, value string) int
 }
 
-func Setup(useDb bool) (string, error) {
+func Setup(mode Mode) (string, error) {
 
 	homeDir := os.Getenv("HOME")
 
@@ -54,14 +62,26 @@ func Setup(useDb bool) (string, error) {
 			return "", e
 		}
 
-		if useDb {
+		switch mode {
+		case DbMode:
 			return folder + "/" + DB_FILE, nil
+		case FileMode:
+			return folder + "/" + JSON_FILE, nil
+		case CloudMode:
+			return findFirestoreKey(folder)
 		}
-
-		return folder + "/" + JSON_FILE, nil
 	}
 
 	return "", errors.New("Cannot find HOME directory.")
+}
+
+func findFirestoreKey(folder string) (string, error) {
+	keyfile := folder + "/" + KEY_FILE
+	if _, err := os.Stat(keyfile); errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	return keyfile, nil
 }
 
 func setupFolder(homePath string) (string, error) {

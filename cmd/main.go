@@ -13,7 +13,7 @@ import (
 	"github.com/tcooper-uk/go-todo/internal/storage/db"
 )
 
-const useDb = true
+const mode = storage.DbMode
 
 func main() {
 
@@ -21,18 +21,25 @@ func main() {
 	args := os.Args[1:]
 	argCount := len(args)
 
-	filePath, err := storage.Setup(useDb)
+	filePath, err := storage.Setup(mode)
 
-	if err != nil {
-		fmt.Println("Error:", err)
-	}
+	exitOnErr(err)
 
 	var store s.TodoStore
-	if useDb {
+
+	switch mode {
+	case storage.DbMode:
 		store, err = db.NewSQLLiteStorage(filePath)
-	} else {
+	case storage.FileMode:
 		store = s.NewLocalFileStore(filePath)
+	case storage.CloudMode:
+		store, err = db.NewCloudStore(&db.CloudStoreConfig{
+			ProjectId: "todo-de411",
+			KeyFile:   filePath,
+		})
 	}
+
+	exitOnErr(err)
 
 	if argCount == 0 {
 		printItems(store)
@@ -90,6 +97,13 @@ func main() {
 		printHelp()
 	default:
 		fmt.Printf("Unknown command %s\n", args[0])
+		os.Exit(1)
+	}
+}
+
+func exitOnErr(err error) {
+	if err != nil {
+		fmt.Println("Error: ", err)
 		os.Exit(1)
 	}
 }
