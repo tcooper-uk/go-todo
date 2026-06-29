@@ -24,8 +24,6 @@ func NewLocalFileStore(filePath string) *LocalFileStore {
 
 	items := make(map[int]t.Todo)
 
-	// maps are refernece types, so no need for a pointer here
-	// the method will fill the map
 	size, maxId, _ := loadItemsFromFile(filePath, items)
 
 	return &LocalFileStore{
@@ -36,34 +34,47 @@ func NewLocalFileStore(filePath string) *LocalFileStore {
 	}
 }
 
-func (store *LocalFileStore) GetAllItems() *t.TodoCollection {
+func (store *LocalFileStore) GetAllItems(opts ListOptions) *t.TodoCollection {
 	var results []t.Todo
-	var count int
 	var maxLength int
-	for _, v := range store.items {
-		count++
+	now := time.Now()
 
-		valueLength := utf8.RuneCountInString(v.Name)
-		if valueLength > maxLength {
-			maxLength = valueLength
+	for _, v := range store.items {
+		setUpdatedAtIfRequired(&v)
+
+		if !opts.ShowDone && !opts.OnlyDone && v.Done {
+			continue
+		}
+		if opts.OnlyDone && !v.Done {
+			continue
+		}
+		if opts.Priority != "" && string(v.Priority) != opts.Priority {
+			continue
+		}
+		if opts.Overdue && (v.DueDate == nil || !v.DueDate.Before(now)) {
+			continue
+		}
+		if opts.Tag != "" && !hasTag(v.Tags, opts.Tag) {
+			continue
 		}
 
-		setUpdatedAtIfRequired(&v)
+		nameLen := utf8.RuneCountInString(v.Name)
+		if nameLen > maxLength {
+			maxLength = nameLen
+		}
 
 		results = append(results, v)
 	}
 
-	// sort by id
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].ID < results[j].ID
 	})
 
 	return &t.TodoCollection{
 		Items:         results,
-		Size:          count,
+		Size:          len(results),
 		MaxLengthItem: maxLength,
 	}
-
 }
 
 func (store *LocalFileStore) GetItem(id int) *t.Todo {
@@ -75,10 +86,14 @@ func (store *LocalFileStore) GetItem(id int) *t.Todo {
 	return &item
 }
 
-func (store *LocalFileStore) AddItem(value string) int {
+func (store *LocalFileStore) AddItem(todo t.Todo) int {
 	defer saveItems(store.FilePath, store.items)
 	store.MaxId++
-	store.items[store.MaxId] = *t.NewTodo(store.MaxId, value, time.Now())
+	now := time.Now()
+	todo.ID = store.MaxId
+	todo.CreatedAt = now
+	todo.UpdatedAt = now
+	store.items[store.MaxId] = todo
 	return 1
 }
 
@@ -107,19 +122,26 @@ func (store *LocalFileStore) DeleteAllItems() int {
 	return s
 }
 
-func (store *LocalFileStore) EditItem(id int, value string) int {
+func (store *LocalFileStore) EditItem(id int, todo t.Todo) int {
 	defer saveItems(store.FilePath, store.items)
-	i, exists := store.items[id]
-
-	if !exists {
+	if _, exists := store.items[id]; !exists {
 		return 0
 	}
 
-	i.Name = value
-	i.UpdatedAt = time.Now()
-	store.items[id] = i
+	todo.ID = id
+	todo.UpdatedAt = time.Now()
+	store.items[id] = todo
 
 	return 1
+}
+
+func hasTag(tags []string, tag string) bool {
+	for _, tg := range tags {
+		if tg == tag {
+			return true
+		}
+	}
+	return false
 }
 
 func setUpdatedAtIfRequired(item *t.Todo) {
@@ -136,7 +158,6 @@ func saveItems(path string, items map[int]t.Todo) {
 		fmt.Println(err)
 	}
 
-	// clear the file of the old contents
 	file.Truncate(0)
 	file.Seek(0, 0)
 
@@ -145,7 +166,6 @@ func saveItems(path string, items map[int]t.Todo) {
 		tmp = append(tmp, v)
 	}
 
-	// build json and write out
 	j := json.NewEncoder(file)
 	if j.Encode(&tmp) != nil {
 		fmt.Println("There was an error saving the todo list.", err)
@@ -176,10 +196,8 @@ func loadItemsFromFile(path string, items map[int]t.Todo) (int, int, error) {
 
 		size++
 
-		// add to map
 		items[item.ID] = item
 
-		// keep track of max id
 		if item.ID > maxId {
 			maxId = item.ID
 		}
@@ -188,7 +206,6 @@ func loadItemsFromFile(path string, items map[int]t.Todo) (int, int, error) {
 	return size, maxId, nil
 }
 
-// get the storage file
 func getFile(path string) (*os.File, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0755)
 	if err != nil {

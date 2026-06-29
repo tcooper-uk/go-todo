@@ -1,10 +1,14 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/tcooper-uk/go-todo/internal"
@@ -13,16 +17,27 @@ import (
 	"github.com/tcooper-uk/go-todo/internal/storage/db"
 )
 
-const mode = storage.DbMode
+// tagList implements flag.Value for repeatable --tag flags.
+type tagList []string
+
+func (t *tagList) String() string { return strings.Join(*t, ",") }
+func (t *tagList) Set(v string) error {
+	*t = append(*t, v)
+	return nil
+}
 
 func main() {
-
-	// args without program name
 	args := os.Args[1:]
-	argCount := len(args)
+
+	// Global --backend flag parsed before the subcommand.
+	globalFlags := flag.NewFlagSet("", flag.ContinueOnError)
+	backendFlag := globalFlags.String("backend", "", "backend: sqlite|file|cloud (overrides $TODO_BACKEND)")
+	globalFlags.Parse(args)
+	remainingArgs := globalFlags.Args()
+
+	mode := resolveMode(*backendFlag)
 
 	filePath, err := storage.Setup(mode)
-
 	exitOnErr(err)
 
 	var store s.TodoStore
@@ -38,67 +53,255 @@ func main() {
 			KeyFile:   filePath,
 		})
 	}
-
 	exitOnErr(err)
 
-	if argCount == 0 {
-		printItems(store)
+	if len(remainingArgs) == 0 {
+		printItems(store, s.ListOptions{})
 		return
 	}
 
-	// first argument is an ID
-	if id, err := strconv.ParseInt(args[0], 0, 0); argCount == 1 && err == nil {
+	// Single numeric arg: show that item.
+	if id, err := strconv.ParseInt(remainingArgs[0], 0, 0); len(remainingArgs) == 1 && err == nil {
 		item := store.GetItem(int(id))
-
 		if item == nil {
-			// cannot find item
 			fmt.Printf("Cannot find item with ID %d\n", id)
+			os.Exit(1)
 		}
 		printItem(item)
 		return
 	}
 
-	switch args[0] {
-	case "list", "l", "ps", "ls":
-		printItems(store)
-		return
-	case "delete", "remove", "d", "rm":
-		ids := parseIds(args[1:]...)
-		store.DeleteItem(ids...)
-	case "add", "create", "put", "a":
-		value := strings.Join(args[1:], " ")
-		store.AddItem(value)
-	case "e", "edit", "update":
+	cmd := remainingArgs[0]
+	cmdArgs := remainingArgs[1:]
 
-		idErr := func() {
-			fmt.Println("You must supply and ID and new value.")
+	switch cmd {
+	case "list", "l", "ps", "ls":
+		fs := flag.NewFlagSet("list", flag.ExitOnError)
+		all := fs.Bool("all", false, "show done items too")
+		onlyDone := fs.Bool("done", false, "show only done items")
+		priority := fs.String("priority", "", "filter by priority: low|medium|high")
+		var tags tagList
+		fs.Var(&tags, "tag", "filter by tag (repeatable)")
+		overdue := fs.Bool("overdue", false, "show only overdue items")
+		fs.Parse(cmdArgs)
+
+		opts := s.ListOptions{
+			ShowDone: *all,
+			OnlyDone: *onlyDone,
+			Priority: *priority,
+			Overdue:  *overdue,
+		}
+		if len(tags) > 0 {
+			opts.Tag = tags[0]
+		}
+		printItems(store, opts)
+
+	case "delete", "remove", "d", "rm":
+		ids := parseIds(cmdArgs...)
+		store.DeleteItem(ids...)
+
+	case "add", "create", "put", "a":
+		fs := flag.NewFlagSet("add", flag.ExitOnError)
+		priority := fs.String("priority", "", "priority: low|medium|high")
+		due := fs.String("due", "", "due date: YYYY-MM-DD")
+		var tags tagList
+		fs.Var(&tags, "tag", "tag (repeatable)")
+		fs.Parse(cmdArgs)
+
+		name := strings.Join(fs.Args(), " ")
+		if name == "" {
+			var editorErr error
+			name, editorErr = openInEditor("")
+			exitOnErr(editorErr)
+		}
+		if name == "" {
+			fmt.Println("No content provided.")
 			os.Exit(1)
 		}
 
-		if len(args) <= 1 {
-			idErr()
+		todo := internal.Todo{
+			Name:     name,
+			Priority: internal.Priority(*priority),
+			Tags:     []string(tags),
+		}
+		if *due != "" {
+			t, err := time.Parse("2006-01-02", *due)
+			if err != nil {
+				fmt.Printf("Invalid date %q — use YYYY-MM-DD\n", *due)
+				os.Exit(1)
+			}
+			todo.DueDate = &t
+		}
+		store.AddItem(todo)
+
+	case "e", "edit", "update":
+		fs := flag.NewFlagSet("edit", flag.ExitOnError)
+		priority := fs.String("priority", "", "priority: low|medium|high")
+		due := fs.String("due", "", "due date: YYYY-MM-DD (clear with '-')")
+		doneFlagStr := fs.String("done", "", "set done: true|false")
+		newName := fs.String("name", "", "new name (alternative to positional arg)")
+		var tags tagList
+		fs.Var(&tags, "tag", "tag (repeatable, replaces existing tags)")
+		fs.Parse(cmdArgs)
+
+		if fs.NArg() == 0 {
+			fmt.Println("You must supply an ID.")
+			os.Exit(1)
+		}
+		ids := parseIds(fs.Arg(0))
+		if len(ids) == 0 {
+			fmt.Println("You must supply a valid ID.")
+			os.Exit(1)
 		}
 
-		id := parseIds(args[1])
-		if len(id) == 0 {
-			idErr()
+		item := store.GetItem(ids[0])
+		if item == nil {
+			fmt.Printf("Cannot find item with ID %d\n", ids[0])
+			os.Exit(1)
 		}
 
-		value := strings.Join(args[2:], " ")
-		count := store.EditItem(id[0], value)
+		// Determine new name.
+		nameText := *newName
+		if nameText == "" {
+			nameText = strings.Join(fs.Args()[1:], " ")
+		}
+		if nameText == "" {
+			var editorErr error
+			nameText, editorErr = openInEditor(item.Name)
+			exitOnErr(editorErr)
+		}
+		if nameText != "" {
+			item.Name = nameText
+		}
 
+		if *priority != "" {
+			item.Priority = internal.Priority(*priority)
+		}
+		if *due == "-" {
+			item.DueDate = nil
+		} else if *due != "" {
+			t, err := time.Parse("2006-01-02", *due)
+			if err != nil {
+				fmt.Printf("Invalid date %q — use YYYY-MM-DD\n", *due)
+				os.Exit(1)
+			}
+			item.DueDate = &t
+		}
+		if len(tags) > 0 {
+			item.Tags = []string(tags)
+		}
+		if *doneFlagStr != "" {
+			switch strings.ToLower(*doneFlagStr) {
+			case "true", "1", "yes":
+				item.Done = true
+			case "false", "0", "no":
+				item.Done = false
+			default:
+				fmt.Printf("Invalid --done value %q — use true|false\n", *doneFlagStr)
+				os.Exit(1)
+			}
+		}
+
+		count := store.EditItem(ids[0], *item)
 		if count == 0 {
-			fmt.Printf("Cannot find item with ID %d\n", id[0])
+			fmt.Printf("Cannot find item with ID %d\n", ids[0])
 		}
+
+	case "done":
+		if len(cmdArgs) == 0 {
+			fmt.Println("You must supply an ID.")
+			os.Exit(1)
+		}
+		ids := parseIds(cmdArgs[0])
+		if len(ids) == 0 {
+			fmt.Println("You must supply a valid ID.")
+			os.Exit(1)
+		}
+		item := store.GetItem(ids[0])
+		if item == nil {
+			fmt.Printf("Cannot find item with ID %d\n", ids[0])
+			os.Exit(1)
+		}
+		item.Done = true
+		store.EditItem(ids[0], *item)
+
+	case "reopen":
+		if len(cmdArgs) == 0 {
+			fmt.Println("You must supply an ID.")
+			os.Exit(1)
+		}
+		ids := parseIds(cmdArgs[0])
+		if len(ids) == 0 {
+			fmt.Println("You must supply a valid ID.")
+			os.Exit(1)
+		}
+		item := store.GetItem(ids[0])
+		if item == nil {
+			fmt.Printf("Cannot find item with ID %d\n", ids[0])
+			os.Exit(1)
+		}
+		item.Done = false
+		store.EditItem(ids[0], *item)
 
 	case "clearall":
 		store.DeleteAllItems()
+
 	case "help", "-h", "--help":
 		printHelp()
+
 	default:
-		fmt.Printf("Unknown command %s\n", args[0])
+		fmt.Printf("Unknown command %s\n", cmd)
 		os.Exit(1)
 	}
+}
+
+func resolveMode(backendFlag string) s.Mode {
+	src := backendFlag
+	if src == "" {
+		src = os.Getenv("TODO_BACKEND")
+	}
+	switch src {
+	case "file":
+		return s.FileMode
+	case "cloud":
+		return s.CloudMode
+	case "sqlite", "db":
+		return s.DbMode
+	}
+	return s.DbMode
+}
+
+func openInEditor(initial string) (string, error) {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		return "", errors.New("set $EDITOR or $VISUAL to use editor mode")
+	}
+
+	f, err := os.CreateTemp("", "todo-*.txt")
+	if err != nil {
+		return "", err
+	}
+	f.WriteString(initial)
+	f.Close()
+	defer os.Remove(f.Name())
+
+	parts := strings.Fields(editor)
+	cmd := exec.Command(parts[0], append(parts[1:], f.Name())...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	content, err := os.ReadFile(f.Name())
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(content)), nil
 }
 
 func exitOnErr(err error) {
@@ -110,70 +313,141 @@ func exitOnErr(err error) {
 
 func printHelp() {
 	fmt.Println("Todo Store")
-	fmt.Println("USAGE: todo [COMMAND] [ARGUMENT]")
+	fmt.Println("USAGE: todo [--backend=sqlite|file|cloud] [COMMAND] [FLAGS] [ARGUMENT]")
 	fmt.Println()
 	fmt.Println("Commands")
-	fmt.Printf("\tlist, l, ps, ls \t- list your todo items\n")
-
-	fmt.Printf("\tdelete, remove, d, rm \t- delete a todo item but id.\n")
-	fmt.Printf("\t\t- this will take the id as an arugmnet\n")
-
-	fmt.Printf("\tadd, create, put, a \t- add a new item to the todo list.\n")
-	fmt.Printf("\t\t- This will take the full title of the todo item as the arguments following the command.\n")
-
-	fmt.Printf("\te, edit, update \t- edit an existing todo by the id.\n")
-	fmt.Printf("\t\t- this will take the id as an arugmnet\n")
-
-	fmt.Printf("\tclearall \t- delete all todo items.\n")
-
-	fmt.Printf("\thelp, -h, --help \t- show this help text.\n")
+	fmt.Printf("\tlist, l, ps, ls \t- list todo items\n")
+	fmt.Printf("\t\t--all\t\tshow done items too\n")
+	fmt.Printf("\t\t--done\t\tshow only done items\n")
+	fmt.Printf("\t\t--priority\tfilter by priority: low|medium|high\n")
+	fmt.Printf("\t\t--tag\t\tfilter by tag\n")
+	fmt.Printf("\t\t--overdue\tshow only overdue items\n")
+	fmt.Println()
+	fmt.Printf("\tdelete, remove, d, rm \t- delete a todo item by id\n")
+	fmt.Println()
+	fmt.Printf("\tadd, create, put, a \t- add a new item\n")
+	fmt.Printf("\t\t--priority\tlow|medium|high\n")
+	fmt.Printf("\t\t--due\t\tYYYY-MM-DD\n")
+	fmt.Printf("\t\t--tag\t\ttag (repeatable)\n")
+	fmt.Printf("\t\t(no text = opens $EDITOR)\n")
+	fmt.Println()
+	fmt.Printf("\te, edit, update \t- edit an existing todo by id\n")
+	fmt.Printf("\t\t--name\t\tnew name\n")
+	fmt.Printf("\t\t--priority\tlow|medium|high\n")
+	fmt.Printf("\t\t--due\t\tYYYY-MM-DD (use '-' to clear)\n")
+	fmt.Printf("\t\t--tag\t\ttag (repeatable, replaces all tags)\n")
+	fmt.Printf("\t\t--done\t\ttrue|false\n")
+	fmt.Printf("\t\t(no text = opens $EDITOR)\n")
+	fmt.Println()
+	fmt.Printf("\tdone <id>\t\t- mark item as complete\n")
+	fmt.Printf("\treopen <id>\t\t- mark item as not complete\n")
+	fmt.Printf("\tclearall\t\t- delete all todo items\n")
+	fmt.Printf("\thelp, -h, --help\t- show this help text\n")
+	fmt.Println()
+	fmt.Println("Environment")
+	fmt.Printf("\tTODO_BACKEND=sqlite|file|cloud\t- select backend at runtime\n")
 }
 
-func printItems(store s.TodoStore) {
-	items := store.GetAllItems()
+const (
+	ansiRed   = "\033[31m"
+	ansiReset = "\033[0m"
+)
+
+func printItems(store s.TodoStore, opts s.ListOptions) {
+	items := store.GetAllItems(opts)
 
 	const maxChars = 100
 
-	// account for the ... appended when a name is truncated
 	if items.MaxLengthItem >= maxChars {
 		items.MaxLengthItem = maxChars + 3
 	}
 
-	// print headers
-	headerPadding := items.MaxLengthItem - 4
+	nameColWidth := items.MaxLengthItem
+	if nameColWidth < 4 {
+		nameColWidth = 4
+	}
+
+	headerPadding := nameColWidth - 4
 	if headerPadding < 0 {
 		headerPadding = 0
 	}
 
-	fmt.Printf("ID\tItem%s\tCreated At\n", strings.Repeat(" ", headerPadding))
+	fmt.Printf("ID\tSt   Pri  Item%s\tTags\tDue\tCreated\n",
+		strings.Repeat(" ", headerPadding))
 
-	// print items
+	now := time.Now()
+
 	for _, item := range items.Items {
-
-		i := utf8.RuneCountInString(item.Name)
-
-		fmt.Printf("[%d]\t", item.ID)
-		var printCount int
-		for _, runeVal := range item.Name {
-			if printCount == maxChars {
-				fmt.Print("...")
-				break
-			}
-
-			fmt.Printf("%c", runeVal)
-			printCount++
+		doneMarker := "[ ]"
+		if item.Done {
+			doneMarker = "[x]"
 		}
 
-		remainder := items.MaxLengthItem - i
-		fmt.Print(strings.Repeat(" ", remainder))
+		priMarker := "[ ]"
+		switch item.Priority {
+		case internal.PriorityHigh:
+			priMarker = "[H]"
+		case internal.PriorityMedium:
+			priMarker = "[M]"
+		case internal.PriorityLow:
+			priMarker = "[L]"
+		}
 
-		fmt.Printf("\t%s\n", item.CreatedAt.Format("Mon 02 Jan 06 15:04"))
+		// Name column with truncation.
+		nameRunes := []rune(item.Name)
+		printName := string(nameRunes)
+		if len(nameRunes) > maxChars {
+			printName = string(nameRunes[:maxChars]) + "..."
+		}
+		nameLen := utf8.RuneCountInString(printName)
+		namePadding := strings.Repeat(" ", nameColWidth-nameLen)
+
+		// Tags.
+		tagStr := ""
+		for _, tg := range item.Tags {
+			tagStr += "#" + tg + " "
+		}
+		tagStr = strings.TrimSpace(tagStr)
+
+		// Due date.
+		dueStr := ""
+		if item.DueDate != nil {
+			formatted := item.DueDate.Format("Mon 02 Jan 06")
+			if item.DueDate.Before(now) {
+				dueStr = ansiRed + formatted + ansiReset
+			} else {
+				dueStr = formatted
+			}
+		}
+
+		fmt.Printf("[%d]\t%s %s  %s%s\t%s\t%s\t%s\n",
+			item.ID,
+			doneMarker,
+			priMarker,
+			printName,
+			namePadding,
+			tagStr,
+			dueStr,
+			item.CreatedAt.Format("Mon 02 Jan 06"),
+		)
 	}
 }
 
 func printItem(item *internal.Todo) {
+	doneStr := "no"
+	if item.Done {
+		doneStr = "yes"
+	}
 	fmt.Printf("ID:\t\t%d\n", item.ID)
 	fmt.Printf("Item:\t\t%s\n", item.Name)
+	fmt.Printf("Done:\t\t%s\n", doneStr)
+	fmt.Printf("Priority:\t%s\n", item.Priority)
+	if item.DueDate != nil {
+		fmt.Printf("Due:\t\t%s\n", item.DueDate.Format("Mon 02 Jan 06"))
+	}
+	if len(item.Tags) > 0 {
+		fmt.Printf("Tags:\t\t%s\n", strings.Join(item.Tags, ", "))
+	}
 	fmt.Printf("Created At:\t%s\n", item.CreatedAt.Format("Mon 02 Jan 06 15:04"))
 	fmt.Printf("Updated At:\t%s\n", item.UpdatedAt.Format("Mon 02 Jan 06 15:04"))
 }

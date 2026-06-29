@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/tcooper-uk/go-todo/internal"
+	"github.com/tcooper-uk/go-todo/internal/storage"
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -49,9 +50,8 @@ func NewCloudStore(config *CloudStoreConfig) (*CloudStore, error) {
 	return &CloudStore{client: client}, err
 }
 
-// GetAllItems List all the items.
-// Returns a collection of todo items
-func (store *CloudStore) GetAllItems() *internal.TodoCollection {
+// GetAllItems List all the items filtered by opts.
+func (store *CloudStore) GetAllItems(opts storage.ListOptions) *internal.TodoCollection {
 	docRefs, err := store.client.CollectionGroup(collection).Query.
 		Documents(context.Background()).
 		GetAll()
@@ -60,6 +60,7 @@ func (store *CloudStore) GetAllItems() *internal.TodoCollection {
 		return &internal.TodoCollection{}
 	}
 
+	now := time.Now()
 	var items []internal.Todo
 	var maxTitle = 0
 
@@ -67,6 +68,22 @@ func (store *CloudStore) GetAllItems() *internal.TodoCollection {
 		var todo = internal.Todo{}
 		err := each.DataTo(&todo)
 		if err != nil {
+			continue
+		}
+
+		if !opts.ShowDone && !opts.OnlyDone && todo.Done {
+			continue
+		}
+		if opts.OnlyDone && !todo.Done {
+			continue
+		}
+		if opts.Priority != "" && string(todo.Priority) != opts.Priority {
+			continue
+		}
+		if opts.Overdue && (todo.DueDate == nil || !todo.DueDate.Before(now)) {
+			continue
+		}
+		if opts.Tag != "" && !hasTag(todo.Tags, opts.Tag) {
 			continue
 		}
 
@@ -90,15 +107,13 @@ func (store *CloudStore) GetAllItems() *internal.TodoCollection {
 
 }
 
-// GetItem Get a single todo item by it's unique id.
-// Returns a single todo item.
+// GetItem Get a single todo item by its unique id.
 func (store *CloudStore) GetItem(id int) *internal.Todo {
 
 	query := store.client.Collection(collection).Query.
 		Where("ID", "==", id).
 		Limit(1)
 
-	// just assume one for now
 	doc, err := query.Documents(context.Background()).Next()
 
 	if err != nil {
@@ -114,10 +129,8 @@ func (store *CloudStore) GetItem(id int) *internal.Todo {
 	return &todo
 }
 
-// AddItem Add a single item.
-// Returns a count of the amount of items added
-// this will be 1 or -1 indicating an error.
-func (store *CloudStore) AddItem(value string) int {
+// AddItem Add a single item. The store assigns ID and timestamps.
+func (store *CloudStore) AddItem(todo internal.Todo) int {
 
 	nextId := 1
 	now := time.Now()
@@ -135,23 +148,18 @@ func (store *CloudStore) AddItem(value string) int {
 		nextId = int(id) + 1
 	}
 
-	td := internal.Todo{
-		ID:        nextId,
-		Name:      value,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
+	todo.ID = nextId
+	todo.CreatedAt = now
+	todo.UpdatedAt = now
 
-	_, _, err = collectionRef.Add(context.Background(), td)
+	_, _, err = collectionRef.Add(context.Background(), todo)
 	if err != nil {
 		return 0
 	}
 	return 1
 }
 
-// DeleteItem Delete a single item by it's unique id.
-// Returns a count of the amount of items deleted
-// this will be 1 or -1 indicating an error.
+// DeleteItem Delete items by id.
 func (store *CloudStore) DeleteItem(ids ...int) int {
 	deleteCount := 0
 	bulkWriter := store.client.BulkWriter(context.Background())
@@ -171,7 +179,6 @@ func (store *CloudStore) DeleteItem(ids ...int) int {
 }
 
 // DeleteAllItems Delete all items from the store.
-// Returns a count of the amount of items deleted.
 func (store *CloudStore) DeleteAllItems() int {
 	deleteCount := 0
 	bulkWriter := store.client.BulkWriter(context.Background())
@@ -186,28 +193,32 @@ func (store *CloudStore) DeleteAllItems() int {
 	return deleteCount
 }
 
-// EditItem Edit a single item.
-// Updated the item with the given id to the given value.
-// Returns the count of items updated
-func (store *CloudStore) EditItem(id int, value string) int {
+// EditItem Update the item with the given id to match todo.
+func (store *CloudStore) EditItem(id int, todo internal.Todo) int {
 	query := store.client.Collection(collection).Query.
 		Where("ID", "==", id).
 		Limit(1)
 
-	// just assume one for now
 	doc, err := query.Documents(context.Background()).Next()
 
 	if err != nil {
 		return 0
 	}
 
-	update, err := doc.Ref.Update(context.Background(), []firestore.Update{
-		{Path: "Name", Value: value},
-	})
-
-	if update != nil && err == nil {
-		return 1
-	} else {
-		return 0
+	now := time.Now()
+	updates := []firestore.Update{
+		{Path: "Name", Value: todo.Name},
+		{Path: "Done", Value: todo.Done},
+		{Path: "Priority", Value: todo.Priority},
+		{Path: "DueDate", Value: todo.DueDate},
+		{Path: "Tags", Value: todo.Tags},
+		{Path: "UpdatedAt", Value: now},
 	}
+
+	result, err := doc.Ref.Update(context.Background(), updates)
+
+	if result != nil && err == nil {
+		return 1
+	}
+	return 0
 }

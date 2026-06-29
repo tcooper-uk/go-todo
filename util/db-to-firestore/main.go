@@ -14,11 +14,11 @@ func main() {
 	})
 
 	liteStorage, _ := db.NewSQLLiteStorage(dbPath)
-	items := liteStorage.GetAllItems()
+	items := liteStorage.GetAllItems(storage.ListOptions{ShowDone: true})
 
 	firestore.DeleteAllItems()
 
 	for _, item := range items.Items {
-		firestore.AddItem(item.Name)
+		firestore.AddItem(item)
 	}
 }

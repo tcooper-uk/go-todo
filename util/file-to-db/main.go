@@ -12,7 +12,7 @@ func main() {
 	dbPath, _ := storage.Setup(storage.DbMode)
 	jsonFile, _ := storage.Setup(storage.FileMode)
 	localStore := storage.NewLocalFileStore(jsonFile)
-	collection := localStore.GetAllItems()
+	collection := localStore.GetAllItems(storage.ListOptions{ShowDone: true})
 
 	db, _ := sql.Open("sqlite3", dbPath)
 	tx, _ := db.Begin()

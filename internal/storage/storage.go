@@ -21,34 +21,39 @@ const (
 	KEY_FILE  = "firestore_key.json"
 )
 
+// ListOptions controls filtering for GetAllItems.
+type ListOptions struct {
+	ShowDone bool
+	OnlyDone bool
+	Priority string
+	Tag      string
+	Overdue  bool
+}
+
 // TodoStore Represents store of todo items
 type TodoStore interface {
-	// GetAllItems List all the items.
-	// Returns a a collection of todo items
-	GetAllItems() *internal.TodoCollection
+	// GetAllItems List all items, filtered by opts.
+	GetAllItems(opts ListOptions) *internal.TodoCollection
 
-	// GetItem Get a single todo item by it's unique id.
-	// Returns a single todo item.
+	// GetItem Get a single todo item by its unique id.
 	GetItem(id int) *internal.Todo
 
-	// AddItem Add a single item.
-	// Returns a count of the amount of items added
-	// this will be 1 or -1 indicating an error.
-	AddItem(value string) int
+	// AddItem Add a single item. The store assigns ID and timestamps.
+	// Returns 1 on success, 0 on error.
+	AddItem(todo internal.Todo) int
 
-	// DeleteItem Delete a single item by it's unique id.
-	// Returns a count of the amount of items deleted
-	// this will be 1 or -1 indicating an error.
+	// DeleteItem Delete items by id.
+	// Returns count deleted, or 0 on error.
 	DeleteItem(ids ...int) int
 
 	// DeleteAllItems Delete all items from the store.
-	// Returns a count of the amount of items deleted.
+	// Returns count deleted.
 	DeleteAllItems() int
 
-	// EditItem Edit a single item.
-	// Updated the item with the given id to the given value.
-	// Returns the count of items updated
-	EditItem(id int, value string) int
+	// EditItem Update the item with the given id to match todo.
+	// Caller should read the item first, mutate fields, then pass it back.
+	// Returns count updated.
+	EditItem(id int, todo internal.Todo) int
 }
 
 func Setup(mode Mode) (string, error) {
