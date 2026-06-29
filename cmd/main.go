@@ -142,17 +142,18 @@ func main() {
 		newName := fs.String("name", "", "new name (alternative to positional arg)")
 		var tags tagList
 		fs.Var(&tags, "tag", "tag (repeatable, replaces existing tags)")
-		fs.Parse(cmdArgs)
 
-		if fs.NArg() == 0 {
+		// Consume the ID first so that flags after the ID are parsed correctly.
+		if len(cmdArgs) == 0 {
 			fmt.Println("You must supply an ID.")
 			os.Exit(1)
 		}
-		ids := parseIds(fs.Arg(0))
+		ids := parseIds(cmdArgs[0])
 		if len(ids) == 0 {
 			fmt.Println("You must supply a valid ID.")
 			os.Exit(1)
 		}
+		fs.Parse(cmdArgs[1:])
 
 		item := store.GetItem(ids[0])
 		if item == nil {
@@ -160,12 +161,14 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Determine new name.
+		// Determine new name: --name flag, then positional args, then editor.
+		// Only open the editor when no flags and no positional name were given.
 		nameText := *newName
 		if nameText == "" {
-			nameText = strings.Join(fs.Args()[1:], " ")
+			nameText = strings.Join(fs.Args(), " ")
 		}
-		if nameText == "" {
+		noFlagsSet := *priority == "" && *due == "" && *doneFlagStr == "" && len(tags) == 0
+		if nameText == "" && noFlagsSet {
 			var editorErr error
 			nameText, editorErr = openInEditor(item.Name)
 			exitOnErr(editorErr)
@@ -358,13 +361,31 @@ func printItems(store s.TodoStore, opts s.ListOptions) {
 
 	const maxChars = 100
 
-	if items.MaxLengthItem >= maxChars {
-		items.MaxLengthItem = maxChars + 3
+	// Pre-compute display names (first line only, truncated) and track max width.
+	type row struct {
+		item      internal.Todo
+		printName string
 	}
-
-	nameColWidth := items.MaxLengthItem
-	if nameColWidth < 4 {
-		nameColWidth = 4
+	rows := make([]row, len(items.Items))
+	nameColWidth := 4
+	for i, item := range items.Items {
+		firstLine := item.Name
+		hasMoreLines := false
+		if idx := strings.IndexByte(item.Name, '\n'); idx != -1 {
+			firstLine = item.Name[:idx]
+			hasMoreLines = true
+		}
+		nameRunes := []rune(firstLine)
+		printName := firstLine
+		if len(nameRunes) > maxChars {
+			printName = string(nameRunes[:maxChars]) + "…"
+		} else if hasMoreLines {
+			printName += " …"
+		}
+		rows[i] = row{item, printName}
+		if w := utf8.RuneCountInString(printName); w > nameColWidth {
+			nameColWidth = w
+		}
 	}
 
 	headerPadding := nameColWidth - 4
@@ -377,7 +398,8 @@ func printItems(store s.TodoStore, opts s.ListOptions) {
 
 	now := time.Now()
 
-	for _, item := range items.Items {
+	for _, r := range rows {
+		item := r.item
 		doneMarker := "[ ]"
 		if item.Done {
 			doneMarker = "[x]"
@@ -393,12 +415,7 @@ func printItems(store s.TodoStore, opts s.ListOptions) {
 			priMarker = "[L]"
 		}
 
-		// Name column with truncation.
-		nameRunes := []rune(item.Name)
-		printName := string(nameRunes)
-		if len(nameRunes) > maxChars {
-			printName = string(nameRunes[:maxChars]) + "..."
-		}
+		printName := r.printName
 		nameLen := utf8.RuneCountInString(printName)
 		namePadding := strings.Repeat(" ", nameColWidth-nameLen)
 
