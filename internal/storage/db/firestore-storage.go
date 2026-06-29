@@ -66,9 +66,8 @@ func (store *CloudStore) GetAllItems() *internal.TodoCollection {
 	for _, each := range docRefs {
 		var todo = internal.Todo{}
 		err := each.DataTo(&todo)
-
 		if err != nil {
-			panic(err)
+			continue
 		}
 
 		nameLen := len(todo.Name)

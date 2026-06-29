@@ -90,12 +90,19 @@ func (store *SQLLiteStore) GetItem(id int) *internal.Todo {
 // Returns a count of the amount of items added
 // this will be 1 or -1 indicating an error.
 func (store *SQLLiteStore) AddItem(value string) int {
-	tx, _ := store.db.Begin()
+	tx, err := store.db.Begin()
+	if err != nil {
+		return 0
+	}
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO todo_item (created_at, updated_at, name)
 		VALUES (?, ?, ?)
 	`)
+	if err != nil {
+		tx.Rollback()
+		return 0
+	}
 	defer stmt.Close()
 
 	now := time.Now().UnixMilli()
@@ -116,14 +123,16 @@ func (store *SQLLiteStore) AddItem(value string) int {
 func (store *SQLLiteStore) DeleteItem(ids ...int) int {
 
 	tx, err := store.db.Begin()
+	if err != nil {
+		return 0
+	}
 
 	stmt, err := tx.Prepare("DELETE FROM todo_item WHERE id = ?")
-	defer stmt.Close()
-
 	if err != nil {
 		tx.Rollback()
 		return 0
 	}
+	defer stmt.Close()
 
 	var successCount int
 
@@ -169,21 +178,23 @@ func (store *SQLLiteStore) DeleteAllItems() int {
 // Updated the item with the given id to the given value.
 // Returns the count of items updated
 func (store *SQLLiteStore) EditItem(id int, value string) int {
-	tx, _ := store.db.Begin()
+	tx, err := store.db.Begin()
+	if err != nil {
+		return 0
+	}
 
 	stmt, err := tx.Prepare(`
 		UPDATE todo_item
-		SET 
+		SET
 			name = ?,
 			updated_at = ?
 			WHERE id = ?
 	`)
-	defer stmt.Close()
-
 	if err != nil {
 		tx.Rollback()
 		return 0
 	}
+	defer stmt.Close()
 
 	now := time.Now().UnixMilli()
 	res, err := stmt.Exec(value, now, id)

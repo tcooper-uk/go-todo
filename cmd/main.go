@@ -134,9 +134,9 @@ func printItems(store s.TodoStore) {
 
 	const maxChars = 100
 
-	// account for the ...
+	// account for the ... appended when a name is truncated
 	if items.MaxLengthItem >= maxChars {
-		items.MaxLengthItem = items.MaxLengthItem + 3
+		items.MaxLengthItem = maxChars + 3
 	}
 
 	// print headers

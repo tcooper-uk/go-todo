@@ -67,7 +67,10 @@ func (store *LocalFileStore) GetAllItems() *t.TodoCollection {
 }
 
 func (store *LocalFileStore) GetItem(id int) *t.Todo {
-	item := store.items[id]
+	item, exists := store.items[id]
+	if !exists {
+		return nil
+	}
 	setUpdatedAtIfRequired(&item)
 	return &item
 }
@@ -98,7 +101,7 @@ func (store *LocalFileStore) DeleteItem(ids ...int) int {
 func (store *LocalFileStore) DeleteAllItems() int {
 	defer saveItems(store.FilePath, store.items)
 
-	s := store.ItemCount
+	s := len(store.items)
 	store.items = make(map[int]t.Todo)
 	store.ItemCount = 0
 	return s
@@ -154,12 +157,11 @@ func loadItemsFromFile(path string, items map[int]t.Todo) (int, int, error) {
 	loadErr := errors.New("unable to load items from file")
 
 	f, err := getFile(path)
-	defer f.Close()
-
 	if err != nil {
 		fmt.Println(loadErr, err)
 		return 0, 0, loadErr
 	}
+	defer f.Close()
 
 	var tmp []t.Todo
 
